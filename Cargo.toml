@@ -7,6 +7,9 @@ edition = "2021"
 
 [dependencies]
 actix-web = "4.3.1"
+log = { version = "0.4.18", features = ["kv_unstable_std"] }
+pico-args = { version = "0.5.0", features = ["eq-separator", "short-space-opt", "combined-flags"] }
+pretty_env_logger = "0.5.0"
 querystring = "1.1.0"
 serde = { version = "1.0.163", features = ["derive"] }
 serial_test = "2.0.0"
