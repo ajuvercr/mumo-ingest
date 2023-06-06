@@ -19,11 +19,15 @@ enum Kind {
 
 impl Kind {
     fn apply(&self, idx: u64, max: u64) -> Option<u64> {
+        if max == 0 {
+            return None;
+        }
+
         match (self, idx) {
             (Kind::Prev, 0) => None,
             (Kind::Prev, x) => Some(x - 1),
             (Kind::Next, x) => (x + 1 < max).then_some(x + 1),
-            (Kind::Last, _) => Some(max),
+            (Kind::Last, _) => Some(max - 1),
             (Kind::First, _) => Some(0),
         }
     }
@@ -59,7 +63,7 @@ fn link_to<'a>(
 
     query.insert("index", idx.to_string());
     let mut query = querystring::stringify(query.iter().map(|x| (*x.0, x.1.as_str())).collect());
-    query.pop(); // remove trailing & 
+    query.pop(); // remove trailing &
     parts.path_and_query = PathAndQuery::try_from(format!("{}?{}", path, query)).ok();
 
     Uri::from_parts(parts).ok()
