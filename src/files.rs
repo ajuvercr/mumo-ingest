@@ -6,6 +6,8 @@ use std::{
     path::Path,
 };
 
+use serde::Serialize;
+
 #[derive(Debug, Clone, Copy)]
 pub struct Index {
     start: u64,
@@ -29,6 +31,12 @@ impl Index {
     fn to_bytes(self) -> [u8; 24] {
         unsafe { std::mem::transmute([self.start, self.index, self.length]) }
     }
+}
+
+#[derive(Serialize)]
+pub struct Written {
+    size: usize,
+    index: u64,
 }
 
 pub struct State {
@@ -79,7 +87,7 @@ impl State {
         Ok(index)
     }
 
-    pub fn write(&mut self, data: &[u8], flush: bool) -> Result<()> {
+    pub fn write(&mut self, data: &[u8], flush: bool) -> Result<Written> {
         let index = Index {
             start: self.offset,
             index: self.index,
@@ -103,7 +111,10 @@ impl State {
             self.flush()?;
         }
 
-        Ok(())
+        Ok(Written {
+            size: data.len(),
+            index: self.index - 1,
+        })
     }
 
     pub fn read(&mut self, idx: u64) -> Result<(Vec<u8>, Index)> {

@@ -5,7 +5,9 @@ use actix_web::{
     get,
     guard::{Guard, GuardContext},
     http::Uri,
-    post, web, App, HttpResponse, HttpServer, Responder,
+    post,
+    web::{self, Bytes, Payload},
+    App, HttpResponse, HttpServer, Responder,
 };
 use files::State;
 use serde::Deserialize;
@@ -105,11 +107,37 @@ async fn read_msg(data: web::Data<St>, info: web::Query<Info>, uri: Uri) -> impl
     }
 }
 
+const MAX_SIZE: usize = 262_144_000; // max payload size is 256k
+async fn extract_payload(mut payload: Payload) -> Result<Bytes, actix_web::Error> {
+    use futures::StreamExt;
+
+    let mut body = web::BytesMut::new();
+    while let Some(chunk) = payload.next().await {
+        trace!("chunk!");
+        let chunk = chunk?;
+        // limit max size of in-memory payload
+        if (body.len() + chunk.len()) > MAX_SIZE {
+            return Err(actix_web::error::ErrorBadRequest("overflow"));
+        }
+        body.extend_from_slice(&chunk);
+    }
+
+    Ok(body.into())
+}
+
 #[post("")]
-async fn write_msg(data: web::Data<St>, req_body: web::Bytes) -> impl Responder {
+async fn write_msg(data: web::Data<St>, req_body: Payload) -> impl Responder {
+    let bin = match extract_payload(req_body).await {
+        Ok(x) => x,
+        Err(e) => {
+            error!("Acquire lock failed! {}", e);
+            return HttpResponse::BadRequest().body("extracting payload failed");
+        }
+    };
+
     match data.lock() {
-        Ok(mut st) => match st.write(&req_body, true) {
-            Ok(_) => HttpResponse::Ok().finish(),
+        Ok(mut st) => match st.write(&bin, true) {
+            Ok(written) => HttpResponse::Ok().body(serde_json::to_string_pretty(&written).unwrap()),
             Err(e) => {
                 warn!(err = log::as_error!(e); "Writing msg failed");
                 HttpResponse::NotFound().finish()
