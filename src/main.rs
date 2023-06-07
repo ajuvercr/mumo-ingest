@@ -29,6 +29,7 @@ FLAGS:
 
 OPTIONS:
   -p NUMBER             Set used port (default 8000)
+  --path NUMBER         Ingest path used (default \"\")
   -d STRING             Path to store incoming data (default \"data/data.bin\")
   -i STRING             Path to store indices (default \"data/indices.bin\")
   -s STRING             Secret required as query param (default None)
@@ -44,6 +45,7 @@ struct AppArgs {
     data: std::path::PathBuf,
     indices: std::path::PathBuf,
     secret: Option<String>,
+    ingest: String,
 }
 
 fn parse_args() -> Result<AppArgs, pico_args::Error> {
@@ -57,6 +59,9 @@ fn parse_args() -> Result<AppArgs, pico_args::Error> {
 
     let args = AppArgs {
         port: pargs.opt_value_from_str("-p")?.unwrap_or(8000),
+        ingest: pargs
+            .opt_value_from_str("--path")?
+            .unwrap_or(String::from("")),
         data: pargs
             .opt_value_from_str("-d")?
             .unwrap_or(PathBuf::from("data/data.bin")),
@@ -178,6 +183,7 @@ async fn main() -> std::io::Result<()> {
         data,
         secret,
         indices,
+        ingest,
     } = match parse_args() {
         Ok(v) => v,
         Err(e) => {
@@ -200,7 +206,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(state.clone()) // <- register the created data
             .service(
-                web::scope("/")
+                web::scope(&ingest)
                     .guard(guard.clone())
                     .service(read_msg)
                     .service(write_msg),
