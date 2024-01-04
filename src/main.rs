@@ -61,7 +61,7 @@ fn parse_args() -> Result<AppArgs, pico_args::Error> {
         port: pargs.opt_value_from_str("-p")?.unwrap_or(8000),
         ingest: pargs
             .opt_value_from_str("--path")?
-            .unwrap_or(String::from("")),
+            .unwrap_or(String::from("/")),
         data: pargs
             .opt_value_from_str("-d")?
             .unwrap_or(PathBuf::from("data/data.bin")),
@@ -94,6 +94,7 @@ struct Info {
 
 #[get("")]
 async fn read_msg(data: web::Data<St>, info: web::Query<Info>, uri: Uri) -> impl Responder {
+    info!("Got read message");
     trace!("handling uri {}", uri);
     if let Ok(mut st) = data.lock() {
         if let Ok((data, idx)) = st.read(info.index) {
@@ -132,6 +133,7 @@ async fn extract_payload(mut payload: Payload) -> Result<Bytes, actix_web::Error
 
 #[post("")]
 async fn write_msg(data: web::Data<St>, req_body: Payload) -> impl Responder {
+    info!("Got post message");
     let bin = match extract_payload(req_body).await {
         Ok(x) => x,
         Err(e) => {
@@ -162,6 +164,8 @@ struct QueryGuard {
 
 impl Guard for QueryGuard {
     fn check(&self, ctx: &GuardContext<'_>) -> bool {
+
+        let out = 
         match (self.value.as_ref(), ctx.head().uri.query()) {
             (None, _) => true,
             (Some(_), None) => false,
@@ -169,7 +173,10 @@ impl Guard for QueryGuard {
                 let params = querystring::querify(query);
                 params.iter().any(|(k, v)| *k == "key" && *v == sec)
             }
-        }
+        };
+
+        info!("Checking guard for {}, valid: {}", ctx.head().uri, out);
+        out
     }
 }
 
@@ -194,9 +201,15 @@ async fn main() -> std::io::Result<()> {
     // Note: web::Data created _outside_ HttpServer::new closure
     let state = web::Data::new(Mutex::new(State::new(data, indices)?));
     if secret.is_some() {
-        println!("Starting server on {}:{} with a secret", host, port);
+        println!(
+            "Starting server on {}:{}{} with a secret",
+            host, port, ingest
+        );
     } else {
-        println!("Starting server on {}:{} with no secrect", host, port);
+        println!(
+            "Starting server on {}:{}{} with no secrect",
+            host, port, ingest
+        );
     }
     let guard = QueryGuard {
         value: secret.map(Cow::Owned),
